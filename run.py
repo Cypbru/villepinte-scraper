@@ -16,7 +16,7 @@ Remplis ces 2 variables après le guide étapes 4-6.
 """
 
 # ← Colle ici l'ID de ton Google Sheet (depuis l'URL)
-GOOGLE_SHEET_ID = ""
+GOOGLE_SHEET_ID = "1oJQTUGcjnZSmOl4W48KgbUyQlnbghR_yij6EIV-4bIs"
 
 # ← Chemin vers ton fichier credentials.json
 GOOGLE_CREDS = "credentials.json"
