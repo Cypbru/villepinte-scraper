@@ -1,19 +1,3 @@
-"""
-scraper.py
-----------
-Scrape les événements de Paris Nord Villepinte depuis plusieurs sources
-et consolide tout dans un fichier Excel + CSV.
-
-Sources :
-  1. Viparis (agenda officiel)
-  2. EventsEye (salons pro internationaux)
-  3. SortiràParis (événements grand public)
-
-Usage :
-  python scraper.py              → scrape + export
-  python scraper.py --schedule   → tourne en boucle chaque semaine
-"""
-
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -24,16 +8,7 @@ import json
 import os
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)s  %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
 log = logging.getLogger(__name__)
-
-# ─────────────────────────────────────────────
-#  CONFIGURATION
-# ─────────────────────────────────────────────
 
 OUTPUT_DIR = "output"
 OUTPUT_EXCEL = os.path.join(OUTPUT_DIR, "villepinte_events.xlsx")
@@ -41,46 +16,28 @@ OUTPUT_CSV   = os.path.join(OUTPUT_DIR, "villepinte_events.csv")
 OUTPUT_JSON  = os.path.join(OUTPUT_DIR, "villepinte_events.json")
 
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
-# Mots-clés qui indiquent un événement professionnel (salon B2B)
-PRO_KEYWORDS = [
-    "salon", "expo professionnelle", "congrès", "b2b", "industrie",
-    "professionnel", "trade show", "business", "foire", "conférence",
-    "corporate", "summit", "forum"
-]
+PRO_KEYWORDS = ["salon","expo professionnelle","congrès","b2b","industrie","professionnel","trade show","business","foire","conférence","corporate","summit","forum"]
 
-# Mots-clés pour détecter le type de population
 POPULATION_TAGS = {
-    "jeunes":        ["manga", "gaming", "jeux", "pop culture", "cosplay", "sci-fi", "japan expo"],
-    "familles":      ["famille", "enfant", "loisirs", "grand public"],
-    "CSP++":         ["luxe", "design", "mode", "textile", "décoration", "architecture"],
-    "industriels":   ["industrie", "logistique", "btp", "construction", "emballage", "packaging"],
-    "institutionnel":["défense", "militaire", "sécurité", "naval", "police", "état"],
-    "agroalimentaire":["alimentation", "restauration", "food", "sial", "gastronomie"],
+    "jeunes": ["manga","gaming","jeux","pop culture","cosplay","sci-fi","japan expo"],
+    "familles": ["famille","enfant","loisirs","grand public"],
+    "CSP++": ["luxe","design","mode","textile","décoration","architecture"],
+    "industriels": ["industrie","logistique","btp","construction","emballage","packaging"],
+    "institutionnel": ["défense","militaire","sécurité","naval","police","état"],
+    "agroalimentaire": ["alimentation","restauration","food","sial","gastronomie"],
 }
 
-# Score d'importance selon des règles simples
 IMPORTANCE_RULES = {
-    "high": ["eurosatory", "sial", "japan expo", "maison & objet", "intermat",
-             "première vision", "global industrie"],
-    "med":  ["silmo", "all4pack", "euronaval", "milipol", "paris manga"],
+    "high": ["eurosatory","sial","japan expo","maison & objet","intermat","première vision","global industrie"],
+    "med": ["silmo","all4pack","euronaval","milipol","paris manga"],
 }
 
-
-# ─────────────────────────────────────────────
-#  UTILITAIRES
-# ─────────────────────────────────────────────
-
-def get_page(url: str, retries: int = 3, delay: float = 2.0) -> BeautifulSoup | None:
-    """Télécharge une page et retourne un objet BeautifulSoup."""
+def get_page(url, retries=3, delay=2.0):
     for attempt in range(retries):
         try:
             r = requests.get(url, headers=HEADERS, timeout=15)
@@ -89,35 +46,23 @@ def get_page(url: str, retries: int = 3, delay: float = 2.0) -> BeautifulSoup | 
         except requests.RequestException as e:
             log.warning(f"Tentative {attempt+1}/{retries} échouée pour {url} : {e}")
             time.sleep(delay * (attempt + 1))
-    log.error(f"Impossible de récupérer {url} après {retries} tentatives.")
+    log.error(f"Impossible de récupérer {url}")
     return None
 
-
-def parse_french_date(text: str) -> datetime | None:
-    """Convertit une date en français (ex: '30 mars 2026') en datetime."""
-    mois = {
-        "janvier":1,"février":2,"mars":3,"avril":4,"mai":5,"juin":6,
-        "juillet":7,"août":8,"septembre":9,"octobre":10,"novembre":11,"décembre":12,
-        "jan":1,"fév":2,"mar":3,"avr":4,"jun":6,"jul":7,"aoû":8,
-        "sep":9,"oct":10,"nov":11,"déc":12
-    }
+def parse_french_date(text):
+    mois = {"janvier":1,"février":2,"mars":3,"avril":4,"mai":5,"juin":6,"juillet":7,"août":8,"septembre":9,"octobre":10,"novembre":11,"décembre":12,"jan":1,"fév":2,"mar":3,"avr":4,"jun":6,"jul":7,"aoû":8,"sep":9,"oct":10,"nov":11,"déc":12}
     text = text.lower().strip()
-    # Format : "30 mars 2026" ou "30/03/2026" ou "2026-03-30"
-    for pattern, fmt in [
-        (r"(\d{4})-(\d{2})-(\d{2})", "%Y-%m-%d"),
-        (r"(\d{2})/(\d{2})/(\d{4})", "%d/%m/%Y"),
-    ]:
+    for pattern, fmt in [(r"(\d{4})-(\d{2})-(\d{2})", "%Y-%m-%d"),(r"(\d{2})/(\d{2})/(\d{4})", "%d/%m/%Y")]:
         m = re.search(pattern, text)
         if m:
             try:
                 return datetime.strptime(m.group(0), fmt)
             except ValueError:
                 pass
-    # Format littéral
     m = re.search(r"(\d{1,2})\s+([a-zéûà]+)\.?\s+(\d{4})", text)
     if m:
         day, mon_str, year = m.groups()
-        mon = mois.get(mon_str[:3], None) or mois.get(mon_str, None)
+        mon = mois.get(mon_str[:3]) or mois.get(mon_str)
         if mon:
             try:
                 return datetime(int(year), mon, int(day))
@@ -125,322 +70,156 @@ def parse_french_date(text: str) -> datetime | None:
                 pass
     return None
 
-
-def count_days(start: datetime, end: datetime) -> int:
+def count_days(start, end):
     return max(1, (end - start).days + 1)
 
-
-def has_weekend(start: datetime, end: datetime) -> bool:
+def has_weekend(start, end):
     d = start
     while d <= end:
-        if d.weekday() >= 5:   # 5=samedi, 6=dimanche
+        if d.weekday() >= 5:
             return True
         d += timedelta(days=1)
     return False
 
-
-def infer_population(name: str, secteur: str) -> str:
-    """Déduit un profil de population à partir du nom et du secteur."""
+def infer_population(name, secteur):
     text = (name + " " + secteur).lower()
-    found = []
-    for tag, keywords in POPULATION_TAGS.items():
-        if any(k in text for k in keywords):
-            found.append(tag)
+    found = [tag for tag, keywords in POPULATION_TAGS.items() if any(k in text for k in keywords)]
     return ", ".join(found) if found else "Professionnels divers"
 
-
-def infer_importance(name: str) -> str:
+def infer_importance(name):
     name_lower = name.lower()
     for imp, keywords in IMPORTANCE_RULES.items():
         if any(k in name_lower for k in keywords):
             return imp
     return "low"
 
-
-def is_professional(name: str, event_type: str, secteur: str) -> bool:
+def is_professional(name, event_type, secteur):
     text = (name + " " + event_type + " " + secteur).lower()
     return any(k in text for k in PRO_KEYWORDS)
 
-
-def enrich_event(ev: dict) -> dict:
-    """Ajoute les champs calculés à un événement brut."""
+def enrich_event(ev):
     start = ev.get("date_debut")
-    end   = ev.get("date_fin") or start
-
+    end = ev.get("date_fin") or start
     if start and end:
         nb_jours = count_days(start, end)
-        weekend  = has_weekend(start, end)
+        weekend = has_weekend(start, end)
         visitors_total = ev.get("visiteurs_total", 0)
-        visitors_jour  = round(visitors_total / nb_jours) if nb_jours > 0 else 0
+        visitors_jour = round(visitors_total / nb_jours) if nb_jours > 0 else 0
     else:
         nb_jours = None
-        weekend  = None
+        weekend = None
         visitors_total = ev.get("visiteurs_total", 0)
-        visitors_jour  = 0
-
-    nom     = ev.get("nom", "")
+        visitors_jour = 0
+    nom = ev.get("nom", "")
     secteur = ev.get("secteur", "")
-    etype   = ev.get("type_evenement", "")
-
+    etype = ev.get("type_evenement", "")
     return {
-        "nom":              nom,
-        "lieu":             ev.get("lieu", "Paris Nord Villepinte"),
-        "date_debut":       start.strftime("%Y-%m-%d") if start else None,
-        "date_fin":         end.strftime("%Y-%m-%d")   if end   else None,
-        "nb_jours":         nb_jours,
-        "weekend_inclus":   "Oui" if weekend else "Non",
-        "type_evenement":   etype,
-        "secteur":          secteur,
-        "visiteurs_total":  visitors_total,
+        "nom": nom,
+        "lieu": ev.get("lieu", "Paris Nord Villepinte"),
+        "date_debut": start.strftime("%Y-%m-%d") if start else None,
+        "date_fin": end.strftime("%Y-%m-%d") if end else None,
+        "nb_jours": nb_jours,
+        "weekend_inclus": "Oui" if weekend else "Non",
+        "type_evenement": etype,
+        "secteur": secteur,
+        "visiteurs_total": visitors_total,
         "visiteurs_par_jour": visitors_jour,
-        "nb_places":        ev.get("nb_places", None),
-        "taux_remplissage": (
-            f"{round(visitors_total / ev['nb_places'] * 100)}%"
-            if ev.get("nb_places") and visitors_total else None
-        ),
-        "population":       ev.get("population") or infer_population(nom, secteur),
-        "evenement_pro":    "Oui" if is_professional(nom, etype, secteur) else "Non",
-        "importance":       ev.get("importance") or infer_importance(nom),
-        "description":      ev.get("description", ""),
-        "commentaire":      ev.get("commentaire", ""),
-        "periodicite":      ev.get("periodicite", ""),
-        "source":           ev.get("source", ""),
-        "date_scraping":    datetime.now().strftime("%Y-%m-%d"),
+        "nb_places": ev.get("nb_places", None),
+        "taux_remplissage": f"{round(visitors_total / ev['nb_places'] * 100)}%" if ev.get("nb_places") and visitors_total else None,
+        "population": ev.get("population") or infer_population(nom, secteur),
+        "evenement_pro": "Oui" if is_professional(nom, etype, secteur) else "Non",
+        "importance": ev.get("importance") or infer_importance(nom),
+        "description": ev.get("description", ""),
+        "commentaire": ev.get("commentaire", ""),
+        "periodicite": ev.get("periodicite", ""),
+        "source": ev.get("source", ""),
+        "date_scraping": datetime.now().strftime("%Y-%m-%d"),
     }
 
-
-# ─────────────────────────────────────────────
-#  SOURCE 1 : VIPARIS (agenda officiel)
-# ─────────────────────────────────────────────
-
-def scrape_viparis() -> list[dict]:
-    """
-    Scrape l'agenda officiel de Paris Nord Villepinte sur viparis.com.
-    Note : le site charge les événements en JavaScript. On utilise donc
-    l'URL de l'agenda en version anglaise qui expose parfois plus de données
-    statiques, + fallback sur les données visibles.
-    """
+def scrape_viparis():
     log.info("Scraping Viparis...")
     url = "https://www.viparis.com/nos-lieux/paris-nord-villepinte/agenda"
     soup = get_page(url)
     if not soup:
         return []
-
     events = []
-
-    # Les événements sont dans des cartes avec classe contenant "event" ou "agenda"
-    # Structure observée : divs avec data ou articles
-    cards = soup.find_all(["article", "div"], class_=re.compile(r"event|agenda|card", re.I))
-
+    cards = soup.find_all(["article","div"], class_=re.compile(r"event|agenda|card", re.I))
     for card in cards:
         try:
-            # Nom
-            title_tag = card.find(["h2", "h3", "h4", "strong", "a"])
+            title_tag = card.find(["h2","h3","h4","strong","a"])
             nom = title_tag.get_text(strip=True) if title_tag else ""
             if not nom or len(nom) < 3:
                 continue
-
-            # Dates — cherche des patterns de date dans le texte
             card_text = card.get_text(" ", strip=True)
             dates = re.findall(r"\d{2}/\d{2}/\d{4}", card_text)
             start, end = None, None
             if len(dates) >= 2:
                 start = parse_french_date(dates[0])
-                end   = parse_french_date(dates[1])
+                end = parse_french_date(dates[1])
             elif len(dates) == 1:
                 start = end = parse_french_date(dates[0])
-
-            # Type d'événement
             type_tag = card.find(class_=re.compile(r"type|category|badge|tag", re.I))
             etype = type_tag.get_text(strip=True) if type_tag else ""
-
-            events.append({
-                "nom": nom,
-                "lieu": "Paris Nord Villepinte",
-                "date_debut": start,
-                "date_fin": end,
-                "type_evenement": etype,
-                "secteur": etype,
-                "source": "Viparis",
-            })
-        except Exception as e:
-            log.debug(f"Erreur parsing card Viparis : {e}")
+            events.append({"nom":nom,"lieu":"Paris Nord Villepinte","date_debut":start,"date_fin":end,"type_evenement":etype,"secteur":etype,"source":"Viparis"})
+        except Exception:
             continue
-
-    # Fallback : extraction depuis le texte brut de la page si peu de résultats
     if len(events) < 3:
-        log.info("Viparis : fallback extraction texte brut")
         raw_text = soup.get_text(" ", strip=True)
-        # Cherche les patterns "du JJ/MM/AAAA au JJ/MM/AAAA"
-        pattern = re.compile(
-            r"([A-ZÀ-Ü][A-ZÀ-Üa-zà-ü &']{3,50})\s+"
-            r"du\s+(\d{2}/\d{2}/\d{4})\s+au\s+(\d{2}/\d{2}/\d{4})"
-        )
+        pattern = re.compile(r"([A-ZÀ-Ü][A-ZÀ-Üa-zà-ü &']{3,50})\s+du\s+(\d{2}/\d{2}/\d{4})\s+au\s+(\d{2}/\d{2}/\d{4})")
         for m in pattern.finditer(raw_text):
             nom, d1, d2 = m.groups()
-            events.append({
-                "nom": nom.strip(),
-                "lieu": "Paris Nord Villepinte",
-                "date_debut": parse_french_date(d1),
-                "date_fin":   parse_french_date(d2),
-                "type_evenement": "",
-                "secteur": "",
-                "source": "Viparis (fallback)",
-            })
-
+            events.append({"nom":nom.strip(),"lieu":"Paris Nord Villepinte","date_debut":parse_french_date(d1),"date_fin":parse_french_date(d2),"type_evenement":"","secteur":"","source":"Viparis (fallback)"})
     log.info(f"Viparis : {len(events)} événements trouvés")
     return events
 
-
-# ─────────────────────────────────────────────
-#  SOURCE 2 : EVENTSEYE (salons pro)
-# ─────────────────────────────────────────────
-
-def scrape_eventseye() -> list[dict]:
-    """Scrape EventsEye pour les salons professionnels à Paris Nord Villepinte."""
+def scrape_eventseye():
     log.info("Scraping EventsEye...")
     url = "https://www.eventseye.com/fairs/pl0_salons_paris_11.html"
     soup = get_page(url)
     if not soup:
         return []
-
     events = []
     table = soup.find("table")
     if not table:
-        log.warning("EventsEye : table non trouvée")
         return []
-
-    rows = table.find_all("tr")[1:]  # Skip header
-    for row in rows:
+    for row in table.find_all("tr")[1:]:
         try:
             cells = row.find_all("td")
             if len(cells) < 3:
                 continue
-
-            # Nom + description dans la 1ère cellule
             name_tag = cells[0].find("a")
             nom = name_tag.get_text(strip=True) if name_tag else cells[0].get_text(strip=True)
-
-            # Description en italique
             desc_tag = cells[0].find("em") or cells[0].find("i")
             description = desc_tag.get_text(strip=True) if desc_tag else ""
-
-            # Périodicité
             periodicite = cells[1].get_text(strip=True)
-
-            # Date + durée
             date_text = cells[2].get_text(strip=True)
-            # Format : "10/03/2026 3 jours" ou "nov. 2026 (?)"
             date_match = re.search(r"(\d{2}/\d{2}/\d{4})", date_text)
             days_match = re.search(r"(\d+)\s*jours?", date_text)
-
             start = parse_french_date(date_match.group(1)) if date_match else None
             nb_days = int(days_match.group(1)) if days_match else 1
             end = start + timedelta(days=nb_days - 1) if start else None
-
-            # Si pas de date précise, essayer mois/année
             if not start:
                 month_match = re.search(r"([a-zéûà]+)\.?\s+(\d{4})", date_text.lower())
                 if month_match:
                     start = parse_french_date(f"01 {month_match.group(1)} {month_match.group(2)}")
                     end = start + timedelta(days=nb_days - 1) if start else None
-
-            events.append({
-                "nom": nom,
-                "lieu": "Paris Nord Villepinte",
-                "date_debut": start,
-                "date_fin": end,
-                "type_evenement": "Expo Professionnelle",
-                "secteur": "",
-                "periodicite": periodicite,
-                "description": description,
-                "evenement_pro": "Oui",
-                "source": "EventsEye",
-            })
-        except Exception as e:
-            log.debug(f"Erreur parsing row EventsEye : {e}")
+            events.append({"nom":nom,"lieu":"Paris Nord Villepinte","date_debut":start,"date_fin":end,"type_evenement":"Expo Professionnelle","secteur":"","periodicite":periodicite,"description":description,"evenement_pro":"Oui","source":"EventsEye"})
+        except Exception:
             continue
-
     log.info(f"EventsEye : {len(events)} événements trouvés")
     return events
 
-
-# ─────────────────────────────────────────────
-#  SOURCE 3 : SORTIR À PARIS (grand public)
-# ─────────────────────────────────────────────
-
-def scrape_sortiraparis() -> list[dict]:
-    """Scrape SortiràParis pour les événements grand public à Villepinte."""
-    log.info("Scraping SortiràParis...")
-    url = "https://www.sortiraparis.com/lieux/53151-parc-des-expositions-paris-nord-villepinte"
-    soup = get_page(url)
-    if not soup:
-        return []
-
-    events = []
-
-    # Articles d'événements
-    articles = soup.find_all("article") or soup.find_all("div", class_=re.compile(r"article|event|card", re.I))
-
-    for art in articles:
-        try:
-            title_tag = art.find(["h2", "h3", "h4"])
-            nom = title_tag.get_text(strip=True) if title_tag else ""
-            if not nom or len(nom) < 4:
-                continue
-
-            # Cherche des dates dans l'article
-            text = art.get_text(" ", strip=True)
-            dates = re.findall(r"\d{1,2}\s+[a-zéûà]+\s+\d{4}", text, re.I)
-            start, end = None, None
-            if len(dates) >= 2:
-                start = parse_french_date(dates[0])
-                end   = parse_french_date(dates[1])
-            elif len(dates) == 1:
-                start = end = parse_french_date(dates[0])
-
-            # Lien vers la page détail
-            link_tag = art.find("a", href=True)
-            detail_url = link_tag["href"] if link_tag else ""
-            if detail_url and not detail_url.startswith("http"):
-                detail_url = "https://www.sortiraparis.com" + detail_url
-
-            events.append({
-                "nom": nom,
-                "lieu": "Paris Nord Villepinte",
-                "date_debut": start,
-                "date_fin": end,
-                "type_evenement": "Expo Grand Public",
-                "secteur": "Loisirs / Culture",
-                "source": "SortiràParis",
-                "description": detail_url,
-            })
-        except Exception as e:
-            log.debug(f"Erreur parsing article SortiràParis : {e}")
-            continue
-
-    log.info(f"SortiràParis : {len(events)} événements trouvés")
-    return events
-
-
-# ─────────────────────────────────────────────
-#  SOURCE 4 : EVENTSEYE PAGE 2 (suite des salons)
-# ─────────────────────────────────────────────
-
-def scrape_eventseye_p2() -> list[dict]:
-    """Scrape la page 2 d'EventsEye si elle existe."""
+def scrape_eventseye_p2():
     log.info("Scraping EventsEye page 2...")
     url = "https://www.eventseye.com/fairs/pl1_salons_paris_11.html"
     soup = get_page(url)
     if not soup:
         return []
-    # Réutilise la même logique que page 1
     events = []
     table = soup.find("table")
     if not table:
         return []
-    rows = table.find_all("tr")[1:]
-    for row in rows:
+    for row in table.find_all("tr")[1:]:
         try:
             cells = row.find_all("td")
             if len(cells) < 3:
@@ -457,105 +236,79 @@ def scrape_eventseye_p2() -> list[dict]:
             nb_days = int(days_match.group(1)) if days_match else 1
             end = start + timedelta(days=nb_days - 1) if start else None
             if nom:
-                events.append({
-                    "nom": nom, "lieu": "Paris Nord Villepinte",
-                    "date_debut": start, "date_fin": end,
-                    "type_evenement": "Expo Professionnelle",
-                    "periodicite": periodicite, "description": description,
-                    "source": "EventsEye (p2)",
-                })
+                events.append({"nom":nom,"lieu":"Paris Nord Villepinte","date_debut":start,"date_fin":end,"type_evenement":"Expo Professionnelle","periodicite":periodicite,"description":description,"source":"EventsEye (p2)"})
         except Exception:
             continue
     log.info(f"EventsEye p2 : {len(events)} événements trouvés")
     return events
 
+def scrape_sortiraparis():
+    log.info("Scraping SortiràParis...")
+    url = "https://www.sortiraparis.com/lieux/53151-parc-des-expositions-paris-nord-villepinte"
+    soup = get_page(url)
+    if not soup:
+        return []
+    events = []
+    articles = soup.find_all("article") or soup.find_all("div", class_=re.compile(r"article|event|card", re.I))
+    for art in articles:
+        try:
+            title_tag = art.find(["h2","h3","h4"])
+            nom = title_tag.get_text(strip=True) if title_tag else ""
+            if not nom or len(nom) < 4:
+                continue
+            text = art.get_text(" ", strip=True)
+            dates = re.findall(r"\d{1,2}\s+[a-zéûà]+\s+\d{4}", text, re.I)
+            start, end = None, None
+            if len(dates) >= 2:
+                start = parse_french_date(dates[0])
+                end = parse_french_date(dates[1])
+            elif len(dates) == 1:
+                start = end = parse_french_date(dates[0])
+            link_tag = art.find("a", href=True)
+            detail_url = link_tag["href"] if link_tag else ""
+            if detail_url and not detail_url.startswith("http"):
+                detail_url = "https://www.sortiraparis.com" + detail_url
+            events.append({"nom":nom,"lieu":"Paris Nord Villepinte","date_debut":start,"date_fin":end,"type_evenement":"Expo Grand Public","secteur":"Loisirs / Culture","source":"SortiràParis","description":detail_url})
+        except Exception:
+            continue
+    log.info(f"SortiràParis : {len(events)} événements trouvés")
+    return events
 
-# ─────────────────────────────────────────────
-#  DÉDUPLICATION
-# ─────────────────────────────────────────────
-
-def deduplicate(events: list[dict]) -> list[dict]:
-    """
-    Supprime les doublons en fusionnant les événements avec le même nom
-    (ou nom très similaire) et des dates proches.
-    """
+def deduplicate(events):
     seen = {}
     for ev in events:
         key = re.sub(r"\W+", "", ev["nom"].lower())[:20]
         if key not in seen:
             seen[key] = ev
         else:
-            # Fusionne : complète les champs vides avec la version alternative
-            existing = seen[key]
-            for field in ["description", "periodicite", "population", "commentaire",
-                          "visiteurs_total", "nb_places", "secteur"]:
-                if not existing.get(field) and ev.get(field):
-                    existing[field] = ev[field]
+            for field in ["description","periodicite","population","commentaire","visiteurs_total","nb_places","secteur"]:
+                if not seen[key].get(field) and ev.get(field):
+                    seen[key][field] = ev[field]
     return list(seen.values())
 
-
-# ─────────────────────────────────────────────
-#  EXPORT
-# ─────────────────────────────────────────────
-
-def export(events: list[dict]):
-    """Exporte les données en Excel, CSV et JSON."""
+def export(events):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-
     if not events:
         log.warning("Aucun événement à exporter.")
         return
-
     df = pd.DataFrame(events)
-
-    # Ordre des colonnes
-    cols = [
-        "nom", "lieu", "date_debut", "date_fin", "nb_jours", "weekend_inclus",
-        "type_evenement", "secteur", "periodicite",
-        "visiteurs_total", "visiteurs_par_jour", "nb_places", "taux_remplissage",
-        "population", "evenement_pro", "importance",
-        "description", "commentaire",
-        "source", "date_scraping"
-    ]
+    cols = ["nom","lieu","date_debut","date_fin","nb_jours","weekend_inclus","type_evenement","secteur","periodicite","visiteurs_total","visiteurs_par_jour","nb_places","taux_remplissage","population","evenement_pro","importance","description","commentaire","source","date_scraping"]
     for c in cols:
         if c not in df.columns:
             df[c] = None
     df = df[cols]
-
-    # ── Excel avec mise en forme ──
     writer = pd.ExcelWriter(OUTPUT_EXCEL, engine="xlsxwriter")
     df.to_excel(writer, index=False, sheet_name="Événements")
-    wb  = writer.book
-    ws  = writer.sheets["Événements"]
-
-    # Formats
-    header_fmt = wb.add_format({
-        "bold": True, "bg_color": "#1a1a2e", "font_color": "#FFFFFF",
-        "border": 1, "align": "center", "valign": "vcenter"
-    })
-    date_fmt   = wb.add_format({"num_format": "dd/mm/yyyy", "align": "center"})
-    center_fmt = wb.add_format({"align": "center"})
-    wrap_fmt   = wb.add_format({"text_wrap": True, "valign": "top"})
-    high_fmt   = wb.add_format({"bg_color": "#FFE0E0", "font_color": "#A32D2D", "bold": True})
-    med_fmt    = wb.add_format({"bg_color": "#FFF3CD", "font_color": "#854F0B"})
-
-    # Largeurs de colonnes
-    col_widths = {
-        "nom": 28, "lieu": 22, "date_debut": 13, "date_fin": 13,
-        "nb_jours": 8, "weekend_inclus": 10, "type_evenement": 18,
-        "secteur": 22, "periodicite": 12,
-        "visiteurs_total": 14, "visiteurs_par_jour": 13,
-        "nb_places": 12, "taux_remplissage": 14,
-        "population": 32, "evenement_pro": 10, "importance": 12,
-        "description": 50, "commentaire": 50,
-        "source": 18, "date_scraping": 14,
-    }
+    wb = writer.book
+    ws = writer.sheets["Événements"]
+    header_fmt = wb.add_format({"bold":True,"bg_color":"#1a1a2e","font_color":"#FFFFFF","border":1,"align":"center","valign":"vcenter"})
+    wrap_fmt = wb.add_format({"text_wrap":True,"valign":"top"})
+    high_fmt = wb.add_format({"bg_color":"#FFE0E0","font_color":"#A32D2D","bold":True})
+    med_fmt = wb.add_format({"bg_color":"#FFF3CD","font_color":"#854F0B"})
+    col_widths = {"nom":28,"lieu":22,"date_debut":13,"date_fin":13,"nb_jours":8,"weekend_inclus":10,"type_evenement":18,"secteur":22,"periodicite":12,"visiteurs_total":14,"visiteurs_par_jour":13,"nb_places":12,"taux_remplissage":14,"population":32,"evenement_pro":10,"importance":12,"description":50,"commentaire":50,"source":18,"date_scraping":14}
     for i, col in enumerate(cols):
-        ws.set_column(i, i, col_widths.get(col, 15),
-                      wrap_fmt if col in ["description", "commentaire", "population"] else None)
-        ws.write(0, i, col.replace("_", " ").title(), header_fmt)
-
-    # Mise en couleur conditionnelle pour "importance"
+        ws.set_column(i, i, col_widths.get(col, 15), wrap_fmt if col in ["description","commentaire","population"] else None)
+        ws.write(0, i, col.replace("_"," ").title(), header_fmt)
     imp_col = cols.index("importance")
     for row_idx in range(1, len(df) + 1):
         val = df.iloc[row_idx - 1]["importance"]
@@ -563,91 +316,14 @@ def export(events: list[dict]):
             ws.write(row_idx, imp_col, val, high_fmt)
         elif val == "med":
             ws.write(row_idx, imp_col, val, med_fmt)
-
-    # Freeze la première ligne
     ws.freeze_panes(1, 0)
     ws.autofilter(0, 0, len(df), len(cols) - 1)
     ws.set_row(0, 22)
-
     writer.close()
     log.info(f"Excel exporté : {OUTPUT_EXCEL}")
-
-    # ── CSV ──
     df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
     log.info(f"CSV exporté : {OUTPUT_CSV}")
-
-    # ── JSON ──
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
         json.dump(events, f, ensure_ascii=False, indent=2, default=str)
     log.info(f"JSON exporté : {OUTPUT_JSON}")
-
     log.info(f"✅ Export terminé — {len(events)} événements")
-
-
-# ─────────────────────────────────────────────
-#  PIPELINE PRINCIPAL
-# ─────────────────────────────────────────────
-
-def run_scraping() -> list[dict]:
-    """Lance tous les scrapers, enrichit et exporte."""
-    log.info("=" * 50)
-    log.info("Début du scraping — Paris Nord Villepinte")
-    log.info("=" * 50)
-
-    raw = []
-    raw += scrape_eventseye()
-    raw += scrape_eventseye_p2()
-    raw += scrape_viparis()
-    raw += scrape_sortiraparis()
-
-    log.info(f"Total brut : {len(raw)} événements (avant déduplication)")
-
-    # Déduplication
-    raw = deduplicate(raw)
-    log.info(f"Après déduplication : {len(raw)} événements")
-
-    # Enrichissement
-    enriched = [enrich_event(ev) for ev in raw]
-
-    # Tri par date
-    enriched.sort(key=lambda x: x.get("date_debut") or "9999-99-99")
-
-    # Export
-    export(enriched)
-
-    return enriched
-
-
-# ─────────────────────────────────────────────
-#  SCHEDULER (optionnel)
-# ─────────────────────────────────────────────
-
-def run_with_schedule():
-    """Lance le scraping toutes les semaines (chaque lundi à 7h)."""
-    try:
-        import schedule
-    except ImportError:
-        log.error("Module 'schedule' non installé. Lancez : pip install schedule")
-        return
-
-    log.info("Mode scheduler activé — scraping chaque lundi à 07:00")
-    schedule.every().monday.at("07:00").do(run_scraping)
-
-    # Premier run immédiat
-    run_scraping()
-
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-
-
-# ─────────────────────────────────────────────
-#  ENTRY POINT
-# ─────────────────────────────────────────────
-
-if __name__ == "__main__":
-    import sys
-    if "--schedule" in sys.argv:
-        run_with_schedule()
-    else:
-        run_scraping()
