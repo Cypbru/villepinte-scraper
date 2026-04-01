@@ -182,4 +182,4 @@ if __name__ == "__main__":
     elif "--scrape-only" in args:
         run("scrape-only")
     else:
-        run("merge")    
+        run("merge")     
