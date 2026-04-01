@@ -16,3 +16,5 @@ jobs:
       - run: pip install requests beautifulsoup4 lxml pandas openpyxl xlsxwriter gspread google-auth
       - run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > credentials.json
       - run: python run.py --seed-only
+        env:
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
