@@ -18,6 +18,7 @@ from datetime import datetime
 # L'ID est lu depuis la variable d'environnement GitHub (secret GOOGLE_SHEET_ID)
 # ou directement ici en fallback
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "1oJQTUGcjnZSmOl4W48KgbUyQlnbghR_yij6EIV-4bIs")
+log.info(f"SHEET ID lu : '{GOOGLE_SHEET_ID}'")
 GOOGLE_CREDS    = "credentials.json"
  
 log = logging.getLogger(__name__)
