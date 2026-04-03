@@ -133,4 +133,89 @@ def export(events):
     log.info(f"Excel exporté : {OUTPUT_EXCEL}")
     df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
     log.info(f"CSV exporté : {OUTPUT_CSV}")
-    with open(OUTPU
+    with open(OUTPUT_JSON,"w",encoding="utf-8") as f:
+        json.dump(events, f, ensure_ascii=False, indent=2, default=str)
+    log.info(f"✅ Export terminé — {len(events)} événements")
+
+def scrape_eventseye():
+    log.info("Scraping EventsEye...")
+    soup = get_page("https://www.eventseye.com/fairs/pl0_salons_paris_11.html")
+    if not soup: return []
+    events = []
+    table = soup.find("table")
+    if not table: return []
+    for row in table.find_all("tr")[1:]:
+        try:
+            cells = row.find_all("td")
+            if len(cells) < 3: continue
+            nom = (cells[0].find("a") or cells[0]).get_text(strip=True)
+            desc = (cells[0].find("em") or cells[0].find("i"))
+            description = desc.get_text(strip=True) if desc else ""
+            periodicite = cells[1].get_text(strip=True)
+            date_text = cells[2].get_text(strip=True)
+            dm = re.search(r"(\d{2}/\d{2}/\d{4})", date_text)
+            daysm = re.search(r"(\d+)\s*jours?", date_text)
+            start = parse_french_date(dm.group(1)) if dm else None
+            nb_days = int(daysm.group(1)) if daysm else 1
+            end = start + timedelta(days=nb_days-1) if start else None
+            events.append({"nom":nom,"lieu":"Paris Nord Villepinte","date_debut":start,"date_fin":end,"type_evenement":"Expo Professionnelle","secteur":"","periodicite":periodicite,"description":description,"evenement_pro":"Oui","source":"EventsEye"})
+        except: continue
+    log.info(f"EventsEye : {len(events)} événements")
+    return events
+
+def scrape_eventseye_p2():
+    log.info("Scraping EventsEye p2...")
+    soup = get_page("https://www.eventseye.com/fairs/pl1_salons_paris_11.html")
+    if not soup: return []
+    events = []
+    table = soup.find("table")
+    if not table: return []
+    for row in table.find_all("tr")[1:]:
+        try:
+            cells = row.find_all("td")
+            if len(cells) < 3: continue
+            nom = (cells[0].find("a") or cells[0]).get_text(strip=True)
+            if not nom: continue
+            periodicite = cells[1].get_text(strip=True)
+            date_text = cells[2].get_text(strip=True)
+            dm = re.search(r"(\d{2}/\d{2}/\d{4})", date_text)
+            daysm = re.search(r"(\d+)\s*jours?", date_text)
+            start = parse_french_date(dm.group(1)) if dm else None
+            nb_days = int(daysm.group(1)) if daysm else 1
+            end = start + timedelta(days=nb_days-1) if start else None
+            events.append({"nom":nom,"lieu":"Paris Nord Villepinte","date_debut":start,"date_fin":end,"type_evenement":"Expo Professionnelle","periodicite":periodicite,"source":"EventsEye p2"})
+        except: continue
+    log.info(f"EventsEye p2 : {len(events)} événements")
+    return events
+
+def scrape_viparis():
+    log.info("Scraping Viparis...")
+    soup = get_page("https://www.viparis.com/nos-lieux/paris-nord-villepinte/agenda")
+    if not soup: return []
+    events = []
+    raw_text = soup.get_text(" ", strip=True)
+    pattern = re.compile(r"([A-ZÀ-Ü][A-ZÀ-Üa-zà-ü &']{3,50})\s+du\s+(\d{2}/\d{2}/\d{4})\s+au\s+(\d{2}/\d{2}/\d{4})")
+    for m in pattern.finditer(raw_text):
+        nom, d1, d2 = m.groups()
+        events.append({"nom":nom.strip(),"lieu":"Paris Nord Villepinte","date_debut":parse_french_date(d1),"date_fin":parse_french_date(d2),"type_evenement":"","secteur":"","source":"Viparis"})
+    log.info(f"Viparis : {len(events)} événements")
+    return events
+
+def scrape_sortiraparis():
+    log.info("Scraping SortiràParis...")
+    soup = get_page("https://www.sortiraparis.com/lieux/53151-parc-des-expositions-paris-nord-villepinte")
+    if not soup: return []
+    events = []
+    for art in soup.find_all("article"):
+        try:
+            title_tag = art.find(["h2","h3","h4"])
+            nom = title_tag.get_text(strip=True) if title_tag else ""
+            if not nom or len(nom) < 4: continue
+            text = art.get_text(" ", strip=True)
+            dates = re.findall(r"\d{1,2}\s+[a-zéûà]+\s+\d{4}", text, re.I)
+            start = parse_french_date(dates[0]) if dates else None
+            end = parse_french_date(dates[1]) if len(dates) > 1 else start
+            events.append({"nom":nom,"lieu":"Paris Nord Villepinte","date_debut":start,"date_fin":end,"type_evenement":"Expo Grand Public","secteur":"Loisirs","source":"SortiràParis"})
+        except: continue
+    log.info(f"SortiràParis : {len(events)} événements")
+    return events
